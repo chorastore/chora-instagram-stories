@@ -59,9 +59,11 @@ def current_slot(now):
 
 def get_ig_user_id():
     pages = api_get("me/accounts", {"access_token": FB_TOKEN})
+    print(f"DEBUG /me/accounts response: {pages}")
     for p in pages.get("data", []):
         page_id = p["id"]
         info = api_get(page_id, {"fields": "instagram_business_account", "access_token": FB_TOKEN})
+        print(f"DEBUG page {page_id} instagram_business_account lookup: {info}")
         if "instagram_business_account" in info:
             return info["instagram_business_account"]["id"]
     raise SystemExit(
