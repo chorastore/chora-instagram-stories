@@ -45,16 +45,26 @@ def _redact(obj):
 def api_get(path, params):
     qs = urllib.parse.urlencode(params)
     url = f"{GRAPH}/{path}?{qs}"
-    with urllib.request.urlopen(url, timeout=30) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        print(f"DEBUG HTTPError {e.code} on GET {path}: {body}")
+        raise
 
 
 def api_post(path, data):
     url = f"{GRAPH}/{path}"
     body = urllib.parse.urlencode(data).encode()
     req = urllib.request.Request(url, data=body, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode(errors="replace")
+        print(f"DEBUG HTTPError {e.code} on POST {path}: {err_body}")
+        raise
 
 
 def istanbul_now():
