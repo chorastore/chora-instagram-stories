@@ -14,6 +14,9 @@ Gunde 4 kez (08 / 12 / 16 / 20 Istanbul saati) tetiklenir. Her calistirmada:
 
 Not: Instagram Graph API, Story'lere tiklanabilir link sticker eklemeyi
 programatik olarak desteklemiyor - bu adim yalniz gorseli paylasir.
+
+GUVENLIK: Bu script asla erisim tokenlerini (access_token) print/log etmez -
+loglar bu public repoda herkese acik goruntulenebiliyor.
 """
 import os
 import json
@@ -28,6 +31,15 @@ BRANCH = "main"
 GRAPH = "https://graph.facebook.com/v21.0"
 
 SLOT_HOURS = {8: 1, 12: 2, 16: 3, 20: 4}
+
+
+def _redact(obj):
+    """Deep-copy a dict/list, replacing any 'access_token' values before logging."""
+    if isinstance(obj, dict):
+        return {k: ("***REDACTED***" if k == "access_token" else _redact(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact(v) for v in obj]
+    return obj
 
 
 def api_get(path, params):
@@ -59,11 +71,14 @@ def current_slot(now):
 
 def get_ig_user_id():
     pages = api_get("me/accounts", {"access_token": FB_TOKEN})
-    print(f"DEBUG /me/accounts response: {pages}")
+    print(f"DEBUG /me/accounts response (redacted): {_redact(pages)}")
     for p in pages.get("data", []):
         page_id = p["id"]
-        info = api_get(page_id, {"fields": "instagram_business_account", "access_token": FB_TOKEN})
-        print(f"DEBUG page {page_id} instagram_business_account lookup: {info}")
+        page_token = p.get("access_token", FB_TOKEN)
+        # Page-level fields like instagram_business_account must be read using
+        # that page's own access token, not the top-level system user token.
+        info = api_get(page_id, {"fields": "instagram_business_account", "access_token": page_token})
+        print(f"DEBUG page {page_id} instagram_business_account lookup (redacted): {_redact(info)}")
         if "instagram_business_account" in info:
             return info["instagram_business_account"]["id"]
     raise SystemExit(
@@ -106,7 +121,7 @@ def main():
         "access_token": FB_TOKEN,
     })
     if "id" not in created:
-        raise SystemExit(f"Media olusturulamadi: {created}")
+        raise SystemExit(f"Media olusturulamadi: {_redact(created)}")
     creation_id = created["id"]
     print(f"Media olusturuldu: {creation_id}")
 
@@ -116,7 +131,7 @@ def main():
         "creation_id": creation_id,
         "access_token": FB_TOKEN,
     })
-    print(f"Yayinlandi: {published}")
+    print(f"Yayinlandi (redacted): {_redact(published)}")
 
 
 if __name__ == "__main__":
