@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Chora Store - Instagram Hikaye Yayinlayici (GitHub Actions icinde calisir)
+
+Gunde 4 kez (08 / 12 / 16 / 20 Istanbul saati) tetiklenir. Her calistirmada:
+  1. FB_ACCESS_TOKEN (repo secret) ile Instagram Business hesabinin ID'sini bulur.
+  2. Su anki Istanbul saatine gore hangi "slot" (1-4) oldugunu belirler.
+  3. images/<bugun>/manifest.json dosyasindan o slota ait gorseli bulur
+     (bu dosya, ayri bir gunluk adimda generate_daily_stories.py + push_to_github.py
+     tarafindan repoya pushlanir).
+  4. raw.githubusercontent.com uzerinden herkese acik image_url ile Instagram
+     Graph API /media -> /media_publish akisini calistirip Story'yi yayinlar.
+
+Not: Instagram Graph API, Story'lere tiklanabilir link sticker eklemeyi
+programatik olarak desteklemiyor - bu adim yalniz gorseli paylasir.
+"""
+import os
+import json
+import time
+import datetime
+import urllib.request
+import urllib.parse
+
+FB_TOKEN = os.environ["FB_ACCESS_TOKEN"]
+REPO = "chorastore/chora-instagram-stories"
+BRANCH = "main"
+GRAPH = "https://graph.facebook.com/v21.0"
+
+SLOT_HOURS = {8: 1, 12: 2, 16: 3, 20: 4}
+
+
+def api_get(path, params):
+    qs = urllib.parse.urlencode(params)
+    url = f"{GRAPH}/{path}?{qs}"
+    with urllib.request.urlopen(url, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
+def api_post(path, data):
+    url = f"{GRAPH}/{path}"
+    body = urllib.parse.urlencode(data).encode()
+    req = urllib.request.Request(url, data=body, method="POST")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
+def istanbul_now():
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+
+
+def current_slot(now):
+    hour = now.hour
+    for h, slot in SLOT_HOURS.items():
+        if abs(hour - h) <= 1:
+            return slot
+    return None
+
+
+def get_ig_user_id():
+    pages = api_get("me/accounts", {"access_token": FB_TOKEN})
+    for p in pages.get("data", []):
+        page_id = p["id"]
+        info = api_get(page_id, {"fields": "instagram_business_account", "access_token": FB_TOKEN})
+        if "instagram_business_account" in info:
+            return info["instagram_business_account"]["id"]
+    raise SystemExit(
+        "Instagram Business Account bulunamadi. Facebook Sayfasi Instagram hesabina "
+        "bagli mi ve sistem kullanicisinin bu sayfaya erisimi var mi kontrol et."
+    )
+
+
+def main():
+    now = istanbul_now()
+    today = now.strftime("%Y-%m-%d")
+    slot = current_slot(now)
+    if slot is None:
+        print(f"Su an ({now.strftime('%H:%M')} Istanbul) bir paylasim slotuna denk gelmiyor, cikiliyor.")
+        return
+
+    manifest_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/manifest.json"
+    try:
+        with urllib.request.urlopen(manifest_url, timeout=30) as r:
+            manifest = json.loads(r.read().decode())
+    except Exception as e:
+        print(f"Manifest bulunamadi ({manifest_url}): {e}")
+        return
+
+    key = str(slot)
+    if key not in manifest:
+        print(f"Slot {slot} icin gorsel manifestte yok, atlaniyor. Manifest: {manifest}")
+        return
+
+    filename = manifest[key]
+    image_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/{filename}"
+
+    ig_user_id = get_ig_user_id()
+    print(f"IG business account: {ig_user_id}")
+    print(f"Paylasilacak gorsel (slot {slot}): {image_url}")
+
+    created = api_post(f"{ig_user_id}/media", {
+        "media_type": "STORIES",
+        "image_url": image_url,
+        "access_token": FB_TOKEN,
+    })
+    if "id" not in created:
+        raise SystemExit(f"Media olusturulamadi: {created}")
+    creation_id = created["id"]
+    print(f"Media olusturuldu: {creation_id}")
+
+    time.sleep(10)
+
+    published = api_post(f"{ig_user_id}/media_publish", {
+        "creation_id": creation_id,
+        "access_token": FB_TOKEN,
+    })
+    print(f"Yayinlandi: {published}")
+
+
+if __name__ == "__main__":
+    main()
