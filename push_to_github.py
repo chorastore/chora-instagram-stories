@@ -6,19 +6,21 @@ Chora Store - Bugunun hikaye gorsellerini GitHub deposuna pushlar
 Story yayinlamak icin istedigi herkese acik image_url saglanmis olur
 (raw.githubusercontent.com uzerinden).
 
-Slot 1/2/4 (08:00 / 12:00 / 20:00) icin tek gorsel; slot 3 (16:00, "Last
-Chance") icin ARKA ARKAYA paylasilacak 3 farkli gorsel bekler:
+Herhangi bir slot (1/2/3/4) TEK gorsel de olabilir, sirayla ARKA ARKAYA
+paylasilacak birden fazla gorsel de (ör. 16:00 "Last Chance" formatinda
+3 farkli urun, ya da bir baska slota gecici olarak tasinmis 3'lu bir seri):
 
-    story_1_<...>.png
-    story_2_<...>.png
-    story_3_1_<...>.jpg
-    story_3_2_<...>.jpg
-    story_3_3_<...>.jpg
-    story_4_<...>.png
+    story_1_<...>.png              (tek gorsel)
+    story_2_<...>.png              (tek gorsel)
+    story_3_1_<...>.jpg            (arka arkaya 1/3)
+    story_3_2_<...>.jpg            (arka arkaya 2/3)
+    story_3_3_<...>.jpg            (arka arkaya 3/3)
+    story_4_<...>.png              (tek gorsel)
 
-manifest.json'da slot "3" anahtari artik TEK dosya adi degil, sirayla
-paylasilacak 3 dosya adindan olusan bir LISTE olarak yazilir; digerleri
-eskisi gibi tek dosya adi (string).
+Dosya adindaki ikinci sayi (ör. "_1_", "_2_", "_3_") sira numarasidir; hic
+yoksa o slot icin tek gorsel demektir. manifest.json'da HER slot degeri
+sirayla paylasilacak dosya adlarindan olusan bir LISTE olarak yazilir
+(tek gorsel olan slotlar icin tek elemanli liste).
 
 generate_daily_stories.py'den SONRA (ve slot 3 icin Canva'dan indirilen 3
 gorsel gunun klasorune kaydedildikten SONRA) calistirilmali.
@@ -66,17 +68,15 @@ STORY_RE = re.compile(r"^story_(\d)(?:_(\d))?_.+\.(png|jpg|jpeg)$", re.IGNORECAS
 
 
 def build_manifest(files):
-    """Dosya adlarindan slot -> gorsel esleme (manifest) uretir.
-    Slot 1/2/4: tek dosya adi (string). Slot 3: sira numarasina gore
-    siralanmis dosya adlarindan olusan bir liste (arka arkaya paylasim).
+    """Dosya adlarindan slot -> gorsel(ler) esleme (manifest) uretir.
+    Her slot degeri, sira numarasina gore siralanmis dosya adlarindan
+    olusan bir LISTE'dir (tek gorselli slotlar icin tek elemanli liste).
 
-    Ayni slota (veya slot 3'te ayni sira numarasina) birden fazla dosya
-    denk gelirse (ör. onceki test/dev calistirmalarindan kalan eski
-    dosyalar), dosyalar silinip/yeniden adlandirilamadigi icin hata
-    vermek yerine EN YENI (mtime'i en buyuk) dosya secilir; digerleri
-    yok sayilir ve konsola not dusulur."""
-    singles = {}  # slot -> (mtime, fname)
-    slot3 = {}    # sub_i -> (mtime, fname)
+    Ayni slot+sira numarasina birden fazla dosya denk gelirse (ör. onceki
+    test/dev calistirmalarindan kalan eski dosyalar), dosyalar silinip/
+    yeniden adlandirilamadigi icin hata vermek yerine EN YENI (mtime'i en
+    buyuk) dosya secilir; digerleri yok sayilir ve konsola not dusulur."""
+    slots = {}  # slot -> {sub_i: (mtime, fname)}
     unmatched = []
     ignored = []
     for p in files:
@@ -86,33 +86,25 @@ def build_manifest(files):
             unmatched.append(fname)
             continue
         slot, sub, _ext = m.group(1), m.group(2), m.group(3)
+        sub_i = int(sub) if sub else 1
         mtime = os.path.getmtime(p)
-        if slot == "3":
-            sub_i = int(sub) if sub else 1
-            prev = slot3.get(sub_i)
-            if prev is None or mtime > prev[0]:
-                if prev is not None:
-                    ignored.append(prev[1])
-                slot3[sub_i] = (mtime, fname)
-            else:
-                ignored.append(fname)
+        bucket = slots.setdefault(slot, {})
+        prev = bucket.get(sub_i)
+        if prev is None or mtime > prev[0]:
+            if prev is not None:
+                ignored.append(prev[1])
+            bucket[sub_i] = (mtime, fname)
         else:
-            prev = singles.get(slot)
-            if prev is None or mtime > prev[0]:
-                if prev is not None:
-                    ignored.append(prev[1])
-                singles[slot] = (mtime, fname)
-            else:
-                ignored.append(fname)
+            ignored.append(fname)
 
     if unmatched:
         raise SystemExit(f"Taninmayan dosya adi(lar): {unmatched}")
     for slot in ("1", "2", "4"):
-        if slot not in singles:
+        if slot not in slots:
             raise SystemExit(f"Slot {slot} icin gorsel bulunamadi.")
-    if not slot3:
-        # Last Chance (16:00) icin Canva'dan indirilen 3 gorsel henuz gunun
-        # klasorune eklenmemis olabilir (bu adim manuel/yari-otomatik).
+    if "3" not in slots:
+        # Last Chance (16:00) icin Canva'dan indirilen gorsel(ler) henuz
+        # gunun klasorune eklenmemis olabilir (bu adim manuel/yari-otomatik).
         # Bu durumda push'u DURDURMAYIZ: slot "3" manifestten eksik birakilir,
         # publish_instagram.py bu durumda otomatik olarak baska bir slotun
         # gorselini (ör. story_1) yedek olarak 16:00'da paylasir.
@@ -123,11 +115,9 @@ def build_manifest(files):
         )
 
     if ignored:
-        print(f"Not: ayni slota ait eski/fazla dosya(lar) yok sayildi (en yeni kullanildi): {sorted(ignored)}")
+        print(f"Not: ayni slot+sira numarasina ait eski/fazla dosya(lar) yok sayildi (en yeni kullanildi): {sorted(ignored)}")
 
-    manifest = {slot: fname for slot, (_, fname) in singles.items()}
-    if slot3:
-        manifest["3"] = [slot3[k][1] for k in sorted(slot3)]
+    manifest = {slot: [bucket[k][1] for k in sorted(bucket)] for slot, bucket in slots.items()}
     return manifest
 
 
@@ -190,8 +180,8 @@ def main():
 
     run(["git", "-C", WORKDIR, "commit", "-m", f"Add stories for {repo_date}"])
     run(["git", "-C", WORKDIR, "push", "origin", "main"])
-    n_slot3 = len(manifest["3"])
-    print(f"Pushlandi: images/{repo_date}/ ({len(files_by_name)} gorsel + manifest.json, slot 3'te {n_slot3} gorsel)")
+    slot_summary = ", ".join(f"slot {s}: {len(v)} gorsel" for s, v in sorted(manifest.items()))
+    print(f"Pushlandi: images/{repo_date}/ ({len(files_by_name)} dosya + manifest.json - {slot_summary})")
 
 
 if __name__ == "__main__":

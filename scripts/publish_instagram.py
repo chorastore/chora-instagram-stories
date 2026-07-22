@@ -12,11 +12,11 @@ Gunde 4 kez (08 / 12 / 16 / 20 Istanbul saati) tetiklenir. Her calistirmada:
   4. raw.githubusercontent.com uzerinden herkese acik image_url ile Instagram
      Graph API /media -> /media_publish akisini calistirip Story'yi yayinlar.
 
-Slot 3 (16:00, "Last Chance"): manifest["3"] TEK dosya adi degil, sirayla
-paylasilacak dosya adlarindan olusan bir LISTE'dir - bu durumda 3 gorsel
-ARKA ARKAYA (aralarinda kisa bir bekleme ile) ayri ayri Story olarak
-yayinlanir. Diger slotlarda (1/2/4) manifest degeri eskisi gibi tek bir
-dosya adi (string) olup tek Story paylasilir.
+Her slotun manifest degeri artik sirayla paylasilacak dosya adlarindan
+olusan bir LISTE'dir (tek gorselli slotlar icin tek elemanli liste).
+Liste birden fazla dosya iceriyorsa (ör. 16:00 "Last Chance" formatinda
+3 farkli urun), bu gorseller ARKA ARKAYA (aralarinda kisa bir bekleme
+ile) ayri ayri Story olarak yayinlanir.
 
 Yedek davranis (fallback): Slot 3'un gorselleri Canva'dan indirilip gunun
 klasorune eklenmesi yari-manuel bir adim oldugundan bazi gunler unutulabilir.
