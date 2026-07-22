@@ -18,6 +18,14 @@ ARKA ARKAYA (aralarinda kisa bir bekleme ile) ayri ayri Story olarak
 yayinlanir. Diger slotlarda (1/2/4) manifest degeri eskisi gibi tek bir
 dosya adi (string) olup tek Story paylasilir.
 
+Yedek davranis (fallback): Slot 3'un gorselleri Canva'dan indirilip gunun
+klasorune eklenmesi yari-manuel bir adim oldugundan bazi gunler unutulabilir.
+Bu durumda manifest'te "3" anahtari hic olmaz (push_to_github.py bunu
+hataya dusurmeden atlar). 16:00 tetiklendiginde "3" yoksa, bu script o
+saati BOS GECMEMEK icin FALLBACK_SLOTS sirasina gore ilk bulunan baska
+slotun (varsayilan: story_1, sonra story_4, sonra story_2) gorselini
+16:00'da paylasir.
+
 Not: Instagram Graph API, Story'lere tiklanabilir link sticker eklemeyi
 programatik olarak desteklemiyor - bu adim yalniz gorseli paylasir.
 """
@@ -34,6 +42,10 @@ BRANCH = "main"
 GRAPH = "https://graph.facebook.com/v21.0"
 
 SLOT_HOURS = {8: 1, 12: 2, 16: 3, 20: 4}
+
+# Slot 3 (16:00, Last Chance) icin gorsel yoksa, o saati bos gecmemek adina
+# sirasiyla denenecek yedek slotlar (ilk bulunan, tek gorsel olarak kullanilir).
+FALLBACK_SLOTS_FOR_3 = ["1", "4", "2"]
 
 
 def api_get(path, params):
@@ -114,9 +126,24 @@ def main():
         return
 
     key = str(slot)
-    if key not in manifest:
-        print(f"Slot {slot} icin gorsel manifestte yok, atlaniyor. Manifest: {manifest}")
-        return
+    used_fallback = False
+    if key not in manifest or not manifest[key]:
+        if key == "3":
+            for fb_key in FALLBACK_SLOTS_FOR_3:
+                if manifest.get(fb_key):
+                    print(
+                        f"Slot 3 (16:00, Last Chance) icin gorsel yok - yedek olarak "
+                        f"slot {fb_key}'un gorseli kullanilacak."
+                    )
+                    key = fb_key
+                    used_fallback = True
+                    break
+            else:
+                print(f"Slot {slot} icin gorsel yok ve yedek de bulunamadi, atlaniyor. Manifest: {manifest}")
+                return
+        else:
+            print(f"Slot {slot} icin gorsel manifestte yok, atlaniyor. Manifest: {manifest}")
+            return
 
     value = manifest[key]
     filenames = value if isinstance(value, list) else [value]
@@ -126,7 +153,8 @@ def main():
 
     ig_user_id = get_ig_user_id()
     print(f"IG business account: {ig_user_id}")
-    print(f"Slot {slot} icin {len(filenames)} gorsel arka arkaya paylasilacak.")
+    tag = " (yedek gorsel)" if used_fallback else ""
+    print(f"Slot {slot} icin {len(filenames)} gorsel arka arkaya paylasilacak{tag}.")
 
     for i, filename in enumerate(filenames):
         image_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/{filename}"

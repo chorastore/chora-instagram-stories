@@ -111,13 +111,23 @@ def build_manifest(files):
         if slot not in singles:
             raise SystemExit(f"Slot {slot} icin gorsel bulunamadi.")
     if not slot3:
-        raise SystemExit("Slot 3 (16:00, Last Chance) icin hic gorsel bulunamadi.")
+        # Last Chance (16:00) icin Canva'dan indirilen 3 gorsel henuz gunun
+        # klasorune eklenmemis olabilir (bu adim manuel/yari-otomatik).
+        # Bu durumda push'u DURDURMAYIZ: slot "3" manifestten eksik birakilir,
+        # publish_instagram.py bu durumda otomatik olarak baska bir slotun
+        # gorselini (ör. story_1) yedek olarak 16:00'da paylasir.
+        print(
+            "Not: Slot 3 (16:00, Last Chance) icin gorsel yok - manifestte \"3\" anahtari "
+            "olmayacak. publish_instagram.py bu durumda otomatik yedek (baska bir slotun "
+            "gorseli) kullanacak."
+        )
 
     if ignored:
         print(f"Not: ayni slota ait eski/fazla dosya(lar) yok sayildi (en yeni kullanildi): {sorted(ignored)}")
 
     manifest = {slot: fname for slot, (_, fname) in singles.items()}
-    manifest["3"] = [slot3[k][1] for k in sorted(slot3)]
+    if slot3:
+        manifest["3"] = [slot3[k][1] for k in sorted(slot3)]
     return manifest
 
 
