@@ -68,10 +68,17 @@ STORY_RE = re.compile(r"^story_(\d)(?:_(\d))?_.+\.(png|jpg|jpeg)$", re.IGNORECAS
 def build_manifest(files):
     """Dosya adlarindan slot -> gorsel esleme (manifest) uretir.
     Slot 1/2/4: tek dosya adi (string). Slot 3: sira numarasina gore
-    siralanmis dosya adlarindan olusan bir liste (arka arkaya paylasim)."""
-    singles = {}
-    slot3 = {}
+    siralanmis dosya adlarindan olusan bir liste (arka arkaya paylasim).
+
+    Ayni slota (veya slot 3'te ayni sira numarasina) birden fazla dosya
+    denk gelirse (ör. onceki test/dev calistirmalarindan kalan eski
+    dosyalar), dosyalar silinip/yeniden adlandirilamadigi icin hata
+    vermek yerine EN YENI (mtime'i en buyuk) dosya secilir; digerleri
+    yok sayilir ve konsola not dusulur."""
+    singles = {}  # slot -> (mtime, fname)
+    slot3 = {}    # sub_i -> (mtime, fname)
     unmatched = []
+    ignored = []
     for p in files:
         fname = os.path.basename(p)
         m = STORY_RE.match(fname)
@@ -79,13 +86,24 @@ def build_manifest(files):
             unmatched.append(fname)
             continue
         slot, sub, _ext = m.group(1), m.group(2), m.group(3)
+        mtime = os.path.getmtime(p)
         if slot == "3":
             sub_i = int(sub) if sub else 1
-            slot3[sub_i] = fname
+            prev = slot3.get(sub_i)
+            if prev is None or mtime > prev[0]:
+                if prev is not None:
+                    ignored.append(prev[1])
+                slot3[sub_i] = (mtime, fname)
+            else:
+                ignored.append(fname)
         else:
-            if slot in singles:
-                raise SystemExit(f"Slot {slot} icin birden fazla dosya var: {singles[slot]} ve {fname}")
-            singles[slot] = fname
+            prev = singles.get(slot)
+            if prev is None or mtime > prev[0]:
+                if prev is not None:
+                    ignored.append(prev[1])
+                singles[slot] = (mtime, fname)
+            else:
+                ignored.append(fname)
 
     if unmatched:
         raise SystemExit(f"Taninmayan dosya adi(lar): {unmatched}")
@@ -95,8 +113,11 @@ def build_manifest(files):
     if not slot3:
         raise SystemExit("Slot 3 (16:00, Last Chance) icin hic gorsel bulunamadi.")
 
-    manifest = dict(singles)
-    manifest["3"] = [slot3[k] for k in sorted(slot3)]
+    if ignored:
+        print(f"Not: ayni slota ait eski/fazla dosya(lar) yok sayildi (en yeni kullanildi): {sorted(ignored)}")
+
+    manifest = {slot: fname for slot, (_, fname) in singles.items()}
+    manifest["3"] = [slot3[k][1] for k in sorted(slot3)]
     return manifest
 
 
