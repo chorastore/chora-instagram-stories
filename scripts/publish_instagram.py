@@ -125,55 +125,9 @@ def publish_one(ig_user_id, image_url):
     print(f"Yayinlandi: {published}")
 
 
-GITHUB_EVENT_NAME = os.environ.get("GITHUB_EVENT_NAME", "")
-
-# --- Tek seferlik manuel telafi (backfill) ---
-# 2026-07-23: push_to_github.py planlanandan cok gec (17:10) calistigi icin
-# 08:00 ve 12:00 slotlari icin manifest hazir degildi, o iki paylasim atlandi.
-# Kullanicinin talebiyle: bu iki slot GitHub Actions'ta "Run workflow" (workflow_dispatch)
-# ile elle tetiklenirse arka arkaya paylasilsin. Sadece 2026-07-23 tarihinde ve sadece
-# manuel tetiklemede calisir; program otomatik olarak kendini devre disi birakir
-# (tarih gectikten sonra bu blok bir sey yapmaz) - kalici bir tasarim degisikligi degildir.
-MANUAL_BACKFILL_DATE = "2026-07-23"
-MANUAL_BACKFILL_SLOTS = ["1", "2"]
-
-
-def publish_slot(ig_user_id, manifest, today, key, label):
-    value = manifest.get(key)
-    filenames = value if isinstance(value, list) else ([value] if value else [])
-    if not filenames:
-        print(f"Backfill: slot {key} ({label}) icin manifestte gorsel yok, atlaniyor.")
-        return
-    print(f"Backfill: slot {key} ({label}) icin {len(filenames)} gorsel paylasilacak.")
-    for i, filename in enumerate(filenames):
-        image_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/{filename}"
-        publish_one(ig_user_id, image_url)
-        if i < len(filenames) - 1:
-            time.sleep(15)
-
-
 def main():
     now = istanbul_now()
     today = now.strftime("%Y-%m-%d")
-
-    if GITHUB_EVENT_NAME == "workflow_dispatch" and today == MANUAL_BACKFILL_DATE:
-        manifest_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/manifest.json"
-        try:
-            with urllib.request.urlopen(manifest_url, timeout=30) as r:
-                manifest = json.loads(r.read().decode())
-        except Exception as e:
-            print(f"Manifest bulunamadi ({manifest_url}): {e}")
-            return
-        ig_user_id = get_ig_user_id()
-        print(f"IG business account: {ig_user_id}")
-        print(f"Manuel backfill: slotlar {MANUAL_BACKFILL_SLOTS} arka arkaya paylasilacak.")
-        labels = {"1": "08:00", "2": "12:00", "3": "16:00 Last Chance", "4": "20:00"}
-        for idx, key in enumerate(MANUAL_BACKFILL_SLOTS):
-            publish_slot(ig_user_id, manifest, today, key, labels.get(key, key))
-            if idx < len(MANUAL_BACKFILL_SLOTS) - 1:
-                time.sleep(20)
-        return
-
     slot = current_slot(now)
     if slot is None:
         print(f"Su an ({now.strftime('%H:%M')} Istanbul) bir paylasim slotuna denk gelmiyor, cikiliyor.")
