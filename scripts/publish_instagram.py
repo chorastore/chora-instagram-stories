@@ -35,6 +35,7 @@ import time
 import datetime
 import urllib.request
 import urllib.parse
+import urllib.error
 
 FB_TOKEN = os.environ["FB_ACCESS_TOKEN"]
 REPO = "chorastore/chora-instagram-stories"
@@ -48,19 +49,34 @@ SLOT_HOURS = {8: 1, 12: 2, 16: 3, 20: 4}
 FALLBACK_SLOTS_FOR_3 = ["1", "4", "2"]
 
 
+def _read_http_error_body(e):
+    try:
+        return e.read().decode("utf-8", errors="replace")
+    except Exception:
+        return "(govde okunamadi)"
+
+
 def api_get(path, params):
     qs = urllib.parse.urlencode(params)
     url = f"{GRAPH}/{path}?{qs}"
-    with urllib.request.urlopen(url, timeout=30) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        print(f"Graph API HATA govdesi (GET {path}): {_read_http_error_body(e)}")
+        raise
 
 
 def api_post(path, data):
     url = f"{GRAPH}/{path}"
     body = urllib.parse.urlencode(data).encode()
     req = urllib.request.Request(url, data=body, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        print(f"Graph API HATA govdesi (POST {path}): {_read_http_error_body(e)}")
+        raise
 
 
 def istanbul_now():
