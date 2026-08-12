@@ -56,7 +56,6 @@ SLOT_HOURS = {
     14: "6",  # story_6 - Lifestyle
     16: "3",  # story_3 - Lifestyle (eskiden Last Chance, artik otomatik)
     20: "4",  # story_4 - Worn
-    17: "test", 18: "test", 19: "test", 21: "test", 22: "test", 23: "test",  # GECICI: 2026-08-12 canli test icin eklendi, test sonrasi KALDIRILACAK
 }
 
 
