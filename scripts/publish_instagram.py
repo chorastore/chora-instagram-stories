@@ -3,9 +3,11 @@
 """
 Chora Store - Instagram Hikaye Yayinlayici (GitHub Actions icinde calisir)
 
-Gunde 4 kez (08 / 12 / 16 / 20 Istanbul saati) tetiklenir. Her calistirmada:
+Gunde 8 kez (08/09/10/11/12/13/14/20 Istanbul saati) tetiklenir. Her calistirmada:
   1. FB_ACCESS_TOKEN (repo secret) ile Instagram Business hesabinin ID'sini bulur.
-  2. Su anki Istanbul saatine gore hangi "slot" (1-4) oldugunu belirler.
+  2. Su anki Istanbul saatine gore hangi "slot" (1,2,3,4,5,6,7,8,9) oldugunu belirler
+     (bkz. SLOT_HOURS - saat -> slot anahtari eslemesi, dosya adlarindaki
+     story_<slot>_... numarasiyla birebir eslesir).
   3. images/<bugun>/manifest.json dosyasindan o slota ait gorsel(ler)i bulur
      (bu dosya, ayri bir gunluk adimda generate_daily_stories.py + push_to_github.py
      tarafindan repoya pushlanir).
@@ -14,17 +16,15 @@ Gunde 4 kez (08 / 12 / 16 / 20 Istanbul saati) tetiklenir. Her calistirmada:
 
 Her slotun manifest degeri artik sirayla paylasilacak dosya adlarindan
 olusan bir LISTE'dir (tek gorselli slotlar icin tek elemanli liste).
-Liste birden fazla dosya iceriyorsa (ör. 16:00 "Last Chance" formatinda
-3 farkli urun), bu gorseller ARKA ARKAYA (aralarinda kisa bir bekleme
-ile) ayri ayri Story olarak yayinlanir.
+Liste birden fazla dosya iceriyorsa, bu gorseller ARKA ARKAYA (aralarinda
+kisa bir bekleme ile) ayri ayri Story olarak yayinlanir.
 
-Yedek davranis (fallback): Slot 3'un gorselleri Canva'dan indirilip gunun
-klasorune eklenmesi yari-manuel bir adim oldugundan bazi gunler unutulabilir.
-Bu durumda manifest'te "3" anahtari hic olmaz (push_to_github.py bunu
-hataya dusurmeden atlar). 16:00 tetiklendiginde "3" yoksa, bu script o
-saati BOS GECMEMEK icin FALLBACK_SLOTS sirasina gore ilk bulunan baska
-slotun (varsayilan: story_1, sonra story_4, sonra story_2) gorselini
-16:00'da paylasir.
+16:00 (slot 3, eskiden "Last Chance" - Canva'da manuel hazirlaniyordu):
+2026-08-16'dan itibaren digerleriyle AYNI Format 2 "Lifestyle" sablonuyla
+TAM OTOMATIK uretiliyor (Umut'un talebi), ayrica bir manuel adim yok. Yine
+de eski gunlerden kalma veya beklenmedik bir bosluk icin FALLBACK_SLOTS_FOR_3
+yedek mekanizmasi korunuyor: slot 3 manifestte yoksa 16:00 bos gecilmez,
+sirayla story_1, sonra story_4, sonra story_2 kullanilir.
 
 Not: Instagram Graph API, Story'lere tiklanabilir link sticker eklemeyi
 programatik olarak desteklemiyor - bu adim yalniz gorseli paylasir.
@@ -42,7 +42,17 @@ REPO = "chorastore/chora-instagram-stories"
 BRANCH = "main"
 GRAPH = "https://graph.facebook.com/v21.0"
 
-SLOT_HOURS = {8: 1, 12: 2, 16: 3, 20: 4}
+SLOT_HOURS = {
+    8: "1",   # story_1 - Worn
+    9: "7",   # story_7 - Lifestyle
+    10: "5",  # story_5 - Lifestyle
+    11: "8",  # story_8 - Lifestyle
+    12: "2",  # story_2 - Lifestyle
+    13: "9",  # story_9 - Lifestyle
+    14: "6",  # story_6 - Lifestyle
+    16: "3",  # story_3 - Lifestyle (eskiden Last Chance, artik otomatik)
+    20: "4",  # story_4 - Worn
+}
 
 # Slot 3 (16:00, Last Chance) icin gorsel yoksa, o saati bos gecmemek adina
 # sirasiyla denenecek yedek slotlar (ilk bulunan, tek gorsel olarak kullanilir).
@@ -84,11 +94,12 @@ def istanbul_now():
 
 
 def current_slot(now):
-    hour = now.hour
-    for h, slot in SLOT_HOURS.items():
-        if abs(hour - h) <= 1:
-            return slot
-    return None
+    """Slotlar artik bitisik saatlerde oldugu icin (08-14 arasi saat basi) TAM saat
+    eslesmesi kullanilir - eski +-1 saat toleransi bitisik slotlari birbirine
+    karistirirdi. Cron her hedef saatin birkac dakika sonrasinda tetiklendigi icin
+    (bkz. workflow'daki '7 ...' offseti) now.hour tetiklenme aninda hedef saatle
+    ayni olur."""
+    return SLOT_HOURS.get(now.hour)
 
 
 def get_ig_user_id():
