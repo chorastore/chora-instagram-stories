@@ -3,7 +3,7 @@
 """
 Chora Store - Instagram Hikaye Yayinlayici (GitHub Actions icinde calisir)
 
-Script'in KENDISI gunde 8 farkli saat icin slot esleme bilgisine sahip (SLOT_HOURS), ama az once tetiklenme sayisi workflow'un cron'una bagli - su an workflow hala eski 4 tetikleyicili halinde (08/12/16/20 Istanbul, 16:00 = slot 3, BILEREK BOS - asagida). Her calistirmada:
+Gunde 6 kez (08/10/12/14/16/20 Istanbul saati) tetiklenir. Her calistirmada:
   1. FB_ACCESS_TOKEN (repo secret) ile Instagram Business hesabinin ID'sini bulur.
   2. Su anki Istanbul saatine gore hangi "slot" (1,2,3,4,5,6,7,8,9) oldugunu belirler
      (bkz. SLOT_HOURS - saat -> slot anahtari eslemesi, dosya adlarindaki
@@ -48,15 +48,16 @@ GRAPH = "https://graph.facebook.com/v21.0"
 
 SLOT_HOURS = {
     8: "1",   # story_1 - Worn
-    9: "7",   # story_7 - Lifestyle
     10: "5",  # story_5 - Lifestyle
-    11: "8",  # story_8 - Lifestyle
     12: "2",  # story_2 - Lifestyle
-    13: "9",  # story_9 - Lifestyle
     14: "6",  # story_6 - Lifestyle
     16: "3",  # story_3 - Lifestyle (eskiden Last Chance, artik otomatik)
     20: "4",  # story_4 - Worn
 }
+# Not: story_7/8/9 (09:00/11:00/13:00) icin gorseller repoda hazir ama
+# 2026-08-12'den itibaren cron/SLOT_HOURS'a dahil edilmiyor (Umut karari:
+# gunde 6 slot - 08/10/12/14/16/20). Ileride eklenmek istenirse manifest'lerde
+# zaten mevcutlar, sadece burada + workflow cron'unda saat eklemek yeterli.
 
 
 
