@@ -48,16 +48,17 @@ GRAPH = "https://graph.facebook.com/v21.0"
 
 SLOT_HOURS = {
     8: "1",   # story_1 - Worn
+    9: "7",   # story_7 - Lifestyle
     10: "5",  # story_5 - Lifestyle
+    11: "8",  # story_8 - Lifestyle
     12: "2",  # story_2 - Lifestyle
+    13: "9",  # story_9 - Lifestyle
     14: "6",  # story_6 - Lifestyle
     16: "3",  # story_3 - Lifestyle (eskiden Last Chance, artik otomatik)
     20: "4",  # story_4 - Worn
 }
-# Not: story_7/8/9 (09:00/11:00/13:00) icin gorseller repoda hazir ama
-# 2026-08-12'den itibaren cron/SLOT_HOURS'a dahil edilmiyor (Umut karari:
-# gunde 6 slot - 08/10/12/14/16/20). Ileride eklenmek istenirse manifest'lerde
-# zaten mevcutlar, sadece burada + workflow cron'unda saat eklemek yeterli.
+# Gunde 9 slot (08-14 arasi saat basi + 16 + 20 Istanbul). 09/11/13 (Umut'un
+# 2026-08-13 karariyla) tekrar eklendi.
 
 
 
