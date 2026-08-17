@@ -47,18 +47,25 @@ BRANCH = "main"
 GRAPH = "https://graph.facebook.com/v21.0"
 
 SLOT_HOURS = {
-    8: "1",   # story_1 - Worn
-    9: "7",   # story_7 - Lifestyle
-    10: "5",  # story_5 - Lifestyle
-    11: "8",  # story_8 - Lifestyle
-    12: "2",  # story_2 - Lifestyle
-    13: "9",  # story_9 - Lifestyle
-    14: "6",  # story_6 - Lifestyle
-    16: "3",  # story_3 - Lifestyle (eskiden Last Chance, artik otomatik)
-    20: "4",  # story_4 - Worn
+    8: "1",    # story_1 - Worn
+    9: "7",    # story_7 - Lifestyle
+    10: "5",   # story_5 - Lifestyle
+    11: "8",   # story_8 - Lifestyle
+    12: "2",   # story_2 - Lifestyle
+    13: "9",   # story_9 - Lifestyle
+    14: "6",   # story_6 - Lifestyle
+    15: "10",  # story_10 - Lifestyle (yeni: saat basi doldurma)
+    16: "3",   # story_3 - Lifestyle (eskiden Last Chance, artik otomatik)
+    17: "11",  # story_11 - Lifestyle (yeni: saat basi doldurma)
+    18: "12",  # story_12 - Lifestyle (yeni: saat basi doldurma)
+    19: "13",  # story_13 - Lifestyle (yeni: saat basi doldurma)
+    20: "4",   # story_4 - Worn
 }
-# Gunde 9 slot (08-14 arasi saat basi + 16 + 20 Istanbul). 09/11/13 (Umut'un
-# 2026-08-13 karariyla) tekrar eklendi.
+# Gunde 13 slot: 08:00'den 20:00'e kadar SAAT BASI kesintisiz (Umut'un
+# 2026-08-17 karariyla). Workflow cron'unun da UTC 5-17 araligini (Istanbul
+# 8-20) kapsayacak sekilde guncellenmesi gerekiyor (.github/workflows/
+# publish-stories.yml - PAT'nin workflow izni olmadigi icin GitHub web
+# arayuzunden elle guncellenmeli).
 
 
 
