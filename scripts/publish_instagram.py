@@ -177,7 +177,7 @@ def main():
     print(f"Slot {slot} icin {len(filenames)} gorsel arka arkaya paylasilacak.")
 
     for i, filename in enumerate(filenames):
-        image_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/{filename}"
+        image_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/{urllib.parse.quote(filename)}"
         publish_one(ig_user_id, image_url)
         if i < len(filenames) - 1:
             time.sleep(15)  # ardisik hikayeler arasinda kisa bekleme
