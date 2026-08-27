@@ -3,32 +3,30 @@
 """
 Chora Store - Instagram Hikaye Yayinlayici (GitHub Actions icinde calisir)
 
-Gunde 6 kez (08/10/12/14/16/20 Istanbul saati) tetiklenir. Her calistirmada:
+Gunde 13 kez (08:00-20:00 Istanbul, saat basi) tetiklenir. Her calistirmada:
   1. FB_ACCESS_TOKEN (repo secret) ile Instagram Business hesabinin ID'sini bulur.
-  2. Su anki Istanbul saatine gore hangi "slot" (1,2,3,4,5,6,7,8,9) oldugunu belirler
-     (bkz. SLOT_HOURS - saat -> slot anahtari eslemesi, dosya adlarindaki
-     story_<slot>_... numarasiyla birebir eslesir).
-  3. images/<bugun>/manifest.json dosyasindan o slota ait gorsel(ler)i bulur
-     (bu dosya, ayri bir gunluk adimda generate_daily_stories.py + push_to_github.py
-     tarafindan repoya pushlanir).
-  4. raw.githubusercontent.com uzerinden herkese acik image_url ile Instagram
+  2. images/<bugun>/manifest.json dosyasindan slot -> gorsel eslemesini okur.
+  3. publish_state.json dosyasindan bugun ICIN HANGI SLOTLARIN ZATEN
+     paylasildigini okur.
+  4. "Vadesi gelmis" (saati gecmis) ama HENUZ paylasilmamis TUM slotlari
+     bulur ve sirayla (arka arkaya, aralarinda kisa bekleme ile) paylasir.
+     Bu CATCH-UP mantigi sayesinde:
+       - GitHub Actions'in zamanlanmis tetikleyicisi saatlerce hic
+         ateslenmese bile (bilinen bir GitHub guvenilirlik sorunu -
+         2026-08-27 sabahi 08/09/10/11 slotlarinin hicbiri tetiklenmedi),
+         bir sonraki calistirmada kacan slotlarin hepsi telafi edilir.
+       - Onceki tasarimda kullanilan "su anki saat TAM olarak slot saatine
+         esit mi" kontrolu, cron gecikmesi saat sinirini asinca (orn. 20:00
+         hedefi 22:12'de tetiklenirse) sessizce hicbir sey paylasmiyordu.
+         Artik "saati gelmis mi" (<=) kontrolu kullanildigi icin bu durum da
+         otomatik telafi ediliyor.
+  5. Her basarili slot sonrasi publish_state.json guncellenip repoya geri
+     push edilir (actions/checkout'un birakip gitCredentiallari + workflow'a
+     eklenen `permissions: contents: write` sayesinde), boylece ayni slot
+     iki kez paylasilmaz (harici bir cron servisi de ayni workflow'u
+     tetikliyor olsa bile idempotent kalir).
+  6. raw.githubusercontent.com uzerinden herkese acik image_url ile Instagram
      Graph API /media -> /media_publish akisini calistirip Story'yi yayinlar.
-
-Her slotun manifest degeri artik sirayla paylasilacak dosya adlarindan
-olusan bir LISTE'dir (tek gorselli slotlar icin tek elemanli liste).
-Liste birden fazla dosya iceriyorsa, bu gorseller ARKA ARKAYA (aralarinda
-kisa bir bekleme ile) ayri ayri Story olarak yayinlanir.
-
-16:00 (slot 3): workflow'un cron tetikleyicisi hala eski 4 slotluk halinde
-(08/12/16/20 Istanbul, .github/workflows/publish-stories.yml - bu dosyayi
-PAT'nin 'workflow' izni olmadigi icin bu script degistiremiyor). 2026-08-12'de
-Umut'un karariyla 16:00 BILEREK BOS birakiliyor (manifest'te "3" anahtari
-yok) - fallback/yedek gorsel KULLANILMIYOR, o saat sessizce atlaniyor. 09/10/
-11/13/14 (slot 7/5/8/9/6) icin gorseller de hazir ama cron bu saatlerde
-tetiklenmedigi surece hicbir zaman paylasilmayacak - ileride cron
-'7 5,6,7,8,9,10,11,17 * * *' olarak guncellenirse (workflow dosyasi GitHub
-web arayuzunden veya 'workflow' izinli bir token ile duzenlenerek) otomatik
-olarak devreye girerler, script tarafinda baska bir degisiklik gerekmez.
 
 Not: Instagram Graph API, Story'lere tiklanabilir link sticker eklemeyi
 programatik olarak desteklemiyor - bu adim yalniz gorseli paylasir.
@@ -37,6 +35,7 @@ import os
 import json
 import time
 import datetime
+import subprocess
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -46,6 +45,10 @@ REPO = "chorastore/chora-instagram-stories"
 BRANCH = "main"
 GRAPH = "https://graph.facebook.com/v21.0"
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+STATE_PATH = os.path.join(REPO_ROOT, "publish_state.json")
+
 SLOT_HOURS = {
     8: "1",    # story_1 - Worn
     9: "7",    # story_7 - Lifestyle
@@ -54,19 +57,14 @@ SLOT_HOURS = {
     12: "2",   # story_2 - Lifestyle
     13: "9",   # story_9 - Lifestyle
     14: "6",   # story_6 - Lifestyle
-    15: "10",  # story_10 - Lifestyle (yeni: saat basi doldurma)
-    16: "3",   # story_3 - Lifestyle (eskiden Last Chance, artik otomatik)
-    17: "11",  # story_11 - Lifestyle (yeni: saat basi doldurma)
-    18: "12",  # story_12 - Lifestyle (yeni: saat basi doldurma)
-    19: "13",  # story_13 - Lifestyle (yeni: saat basi doldurma)
+    15: "10",  # story_10 - Lifestyle
+    16: "3",   # story_3 - Lifestyle
+    17: "11",  # story_11 - Lifestyle
+    18: "12",  # story_12 - Lifestyle
+    19: "13",  # story_13 - Lifestyle
     20: "4",   # story_4 - Worn
 }
-# Gunde 13 slot: 08:00'den 20:00'e kadar SAAT BASI kesintisiz (Umut'un
-# 2026-08-17 karariyla). Workflow cron'unun da UTC 5-17 araligini (Istanbul
-# 8-20) kapsayacak sekilde guncellenmesi gerekiyor (.github/workflows/
-# publish-stories.yml - PAT'nin workflow izni olmadigi icin GitHub web
-# arayuzunden elle guncellenmeli).
-
+# Gunde 13 slot: 08:00'den 20:00'e kadar saat basi (Umut'un 2026-08-17 karari).
 
 
 def _read_http_error_body(e):
@@ -103,13 +101,43 @@ def istanbul_now():
     return datetime.datetime.utcnow() + datetime.timedelta(hours=3)
 
 
-def current_slot(now):
-    """Slotlar artik bitisik saatlerde oldugu icin (08-14 arasi saat basi) TAM saat
-    eslesmesi kullanilir - eski +-1 saat toleransi bitisik slotlari birbirine
-    karistirirdi. Cron her hedef saatin birkac dakika sonrasinda tetiklendigi icin
-    (bkz. workflow'daki '7 ...' offseti) now.hour tetiklenme aninda hedef saatle
-    ayni olur."""
-    return SLOT_HOURS.get(now.hour)
+def load_state():
+    if not os.path.exists(STATE_PATH):
+        return {}
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"UYARI: publish_state.json okunamadi, bos state ile devam ediliyor: {e}")
+        return {}
+
+
+def save_and_push_state(state):
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2, sort_keys=True)
+        f.write("\n")
+
+    def run(cmd):
+        return subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+
+    run(["git", "config", "user.name", "chora-story-bot"])
+    run(["git", "config", "user.email", "actions@users.noreply.github.com"])
+    run(["git", "add", "publish_state.json"])
+    diff = run(["git", "diff", "--cached", "--quiet"])
+    if diff.returncode == 0:
+        return  # degisiklik yok
+    commit = run(["git", "commit", "-m", "state: publish_state.json guncellendi"])
+    if commit.returncode != 0:
+        print(f"UYARI: git commit basarisiz: {commit.stderr}")
+        return
+    pull = run(["git", "pull", "--rebase", "origin", BRANCH])
+    if pull.returncode != 0:
+        print(f"UYARI: git pull --rebase basarisiz: {pull.stderr}")
+    push = run(["git", "push", "origin", BRANCH])
+    if push.returncode != 0:
+        print(f"UYARI: publish_state.json push edilemedi (bir sonraki run yine de dogru calisir, sadece state gecici olarak local kalir): {push.stderr}")
+    else:
+        print("publish_state.json repoya push edildi.")
 
 
 def get_ig_user_id():
@@ -149,10 +177,6 @@ def publish_one(ig_user_id, image_url):
 def main():
     now = istanbul_now()
     today = now.strftime("%Y-%m-%d")
-    slot = current_slot(now)
-    if slot is None:
-        print(f"Su an ({now.strftime('%H:%M')} Istanbul) bir paylasim slotuna denk gelmiyor, cikiliyor.")
-        return
 
     manifest_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/manifest.json"
     try:
@@ -162,25 +186,44 @@ def main():
         print(f"Manifest bulunamadi ({manifest_url}): {e}")
         return
 
-    key = str(slot)
-    if key not in manifest or not manifest[key]:
-        print(f"Slot {slot} icin gorsel manifestte yok (bilerek bos birakilmis olabilir), atlaniyor.")
-        return
+    state = load_state()
+    posted_today = set(state.get(today, []))
 
-    filenames = manifest[key] if isinstance(manifest[key], list) else [manifest[key]]
-    if not filenames:
-        print(f"Slot {slot} icin manifest listesi bos, atlaniyor.")
+    due_slots = [
+        (hour, key) for hour, key in sorted(SLOT_HOURS.items())
+        if hour <= now.hour and key not in posted_today and key in manifest and manifest[key]
+    ]
+
+    if not due_slots:
+        print(f"Su an ({now.strftime('%H:%M')} Istanbul) icin bekleyen/eksik slot yok.")
         return
 
     ig_user_id = get_ig_user_id()
     print(f"IG business account: {ig_user_id}")
-    print(f"Slot {slot} icin {len(filenames)} gorsel arka arkaya paylasilacak.")
+    if len(due_slots) > 1:
+        print(f"UYARI: {len(due_slots)} slot birden telafi ediliyor (kacan tetiklemeler): "
+              f"{[k for _, k in due_slots]}")
 
-    for i, filename in enumerate(filenames):
-        image_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/{urllib.parse.quote(filename)}"
-        publish_one(ig_user_id, image_url)
-        if i < len(filenames) - 1:
-            time.sleep(15)  # ardisik hikayeler arasinda kisa bekleme
+    for idx, (hour, slot) in enumerate(due_slots):
+        filenames = manifest[slot] if isinstance(manifest[slot], list) else [manifest[slot]]
+        filenames = [f for f in filenames if f]
+        if not filenames:
+            posted_today.add(slot)
+            continue
+
+        print(f"Slot {slot} (saat {hour:02d}:00 icin) - {len(filenames)} gorsel paylasilacak.")
+        for i, filename in enumerate(filenames):
+            image_url = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/images/{today}/{urllib.parse.quote(filename)}"
+            publish_one(ig_user_id, image_url)
+            if i < len(filenames) - 1:
+                time.sleep(15)
+
+        posted_today.add(slot)
+        state[today] = sorted(posted_today, key=lambda s: int(s))
+        save_and_push_state(state)
+
+        if idx < len(due_slots) - 1:
+            time.sleep(20)  # ardisik slotlar arasinda kisa bekleme
 
 
 if __name__ == "__main__":
