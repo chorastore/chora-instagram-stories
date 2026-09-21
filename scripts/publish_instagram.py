@@ -3,33 +3,25 @@
 """
 Chora Store - Instagram Hikaye Yayinlayici (GitHub Actions icinde calisir)
 
-Gunde 13 kez (08:00-20:00 Istanbul, saat basi) tetiklenir. Her calistirmada:
+Gunde 6 kez (09:00, 12:00, 14:00, 16:00, 18:00, 20:00 Istanbul) tetiklenir.
+Her calistirmada:
   1. FB_ACCESS_TOKEN (repo secret) ile Instagram Business hesabinin ID'sini bulur.
   2. images/<bugun>/manifest.json dosyasindan slot -> gorsel eslemesini okur.
   3. publish_state.json dosyasindan bugun ICIN HANGI SLOTLARIN ZATEN
      paylasildigini okur.
   4. "Vadesi gelmis" (saati gecmis) ama HENUZ paylasilmamis TUM slotlari
      bulur ve sirayla (arka arkaya, aralarinda kisa bekleme ile) paylasir.
-     Bu CATCH-UP mantigi sayesinde:
-       - GitHub Actions'in zamanlanmis tetikleyicisi saatlerce hic
-         ateslenmese bile (bilinen bir GitHub guvenilirlik sorunu -
-         2026-08-27 sabahi 08/09/10/11 slotlarinin hicbiri tetiklenmedi),
-         bir sonraki calistirmada kacan slotlarin hepsi telafi edilir.
-       - Onceki tasarimda kullanilan "su anki saat TAM olarak slot saatine
-         esit mi" kontrolu, cron gecikmesi saat sinirini asinca (orn. 20:00
-         hedefi 22:12'de tetiklenirse) sessizce hicbir sey paylasmiyordu.
-         Artik "saati gelmis mi" (<=) kontrolu kullanildigi icin bu durum da
-         otomatik telafi ediliyor.
+     Bu CATCH-UP mantigi sayesinde GitHub Actions'in zamanlanmis tetikleyicisi
+     saatlerce hic ateslenmese bile, bir sonraki calistirmada kacan slotlarin
+     hepsi telafi edilir.
   5. Her basarili slot sonrasi publish_state.json guncellenip repoya geri
-     push edilir (actions/checkout'un birakip gitCredentiallari + workflow'a
-     eklenen `permissions: contents: write` sayesinde), boylece ayni slot
-     iki kez paylasilmaz (harici bir cron servisi de ayni workflow'u
-     tetikliyor olsa bile idempotent kalir).
+     push edilir, boylece ayni slot iki kez paylasilmaz (harici bir cron
+     servisi de ayni workflow'u tetikliyor olsa bile idempotent kalir).
   6. raw.githubusercontent.com uzerinden herkese acik image_url ile Instagram
      Graph API /media -> /media_publish akisini calistirip Story'yi yayinlar.
 
-Not: Instagram Graph API, Story'lere tiklanabilir link sticker eklemeyi
-programatik olarak desteklemiyor - bu adim yalniz gorseli paylasir.
+Not: 2026-09-21'den itibaren gunluk slot sayisi 13'ten 6'ya indirildi
+(Umut'un karari): 09:00=kupe(earring), 12/14/16/18=lifestyle, 20:00=kolye(necklace).
 """
 import os
 import json
@@ -50,29 +42,20 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 STATE_PATH = os.path.join(REPO_ROOT, "publish_state.json")
 
 SLOT_HOURS = {
-    8: "1",    # story_1 - Worn
-    9: "7",    # story_7 - Lifestyle
-    10: "5",   # story_5 - Lifestyle
-    11: "8",   # story_8 - Lifestyle
+    9: "1",    # story_1 - Worn (kupe/earring)
     12: "2",   # story_2 - Lifestyle
-    13: "9",   # story_9 - Lifestyle
-    14: "6",   # story_6 - Lifestyle
-    15: "10",  # story_10 - Lifestyle
-    16: "3",   # story_3 - Lifestyle
-    17: "11",  # story_11 - Lifestyle
-    18: "12",  # story_12 - Lifestyle
-    19: "13",  # story_13 - Lifestyle
-    20: "4",   # story_4 - Worn
+    14: "3",   # story_3 - Lifestyle
+    16: "4",   # story_4 - Lifestyle
+    18: "5",   # story_5 - Lifestyle
+    20: "6",   # story_6 - Worn (kolye/necklace)
 }
-# Gunde 13 slot: 08:00'den 20:00'e kadar saat basi (Umut'un 2026-08-17 karari).
-
+# Gunde 6 slot: 09:00'dan 20:00'e (2026-09-21'den itibaren, Umut'un karari).
 
 def _read_http_error_body(e):
     try:
         return e.read().decode("utf-8", errors="replace")
     except Exception:
         return "(govde okunamadi)"
-
 
 def api_get(path, params):
     qs = urllib.parse.urlencode(params)
@@ -83,7 +66,6 @@ def api_get(path, params):
     except urllib.error.HTTPError as e:
         print(f"Graph API HATA govdesi (GET {path}): {_read_http_error_body(e)}")
         raise
-
 
 def api_post(path, data):
     url = f"{GRAPH}/{path}"
@@ -96,10 +78,8 @@ def api_post(path, data):
         print(f"Graph API HATA govdesi (POST {path}): {_read_http_error_body(e)}")
         raise
 
-
 def istanbul_now():
     return datetime.datetime.utcnow() + datetime.timedelta(hours=3)
-
 
 def load_state():
     if not os.path.exists(STATE_PATH):
@@ -110,7 +90,6 @@ def load_state():
     except Exception as e:
         print(f"UYARI: publish_state.json okunamadi, bos state ile devam ediliyor: {e}")
         return {}
-
 
 def save_and_push_state(state):
     with open(STATE_PATH, "w", encoding="utf-8") as f:
@@ -139,7 +118,6 @@ def save_and_push_state(state):
     else:
         print("publish_state.json repoya push edildi.")
 
-
 def get_ig_user_id():
     pages = api_get("me/accounts", {"access_token": FB_TOKEN})
     for p in pages.get("data", []):
@@ -151,7 +129,6 @@ def get_ig_user_id():
         "Instagram Business Account bulunamadi. Facebook Sayfasi Instagram hesabina "
         "bagli mi ve sistem kullanicisinin bu sayfaya erisimi var mi kontrol et."
     )
-
 
 def publish_one(ig_user_id, image_url):
     print(f"Paylasiliyor: {image_url}")
@@ -172,7 +149,6 @@ def publish_one(ig_user_id, image_url):
         "access_token": FB_TOKEN,
     })
     print(f"Yayinlandi: {published}")
-
 
 def main():
     now = istanbul_now()
@@ -224,7 +200,6 @@ def main():
 
         if idx < len(due_slots) - 1:
             time.sleep(20)  # ardisik slotlar arasinda kisa bekleme
-
 
 if __name__ == "__main__":
     main()
