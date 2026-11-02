@@ -42,14 +42,16 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 STATE_PATH = os.path.join(REPO_ROOT, "publish_state.json")
 
 SLOT_HOURS = {
-    9: "1",    # story_1 - Worn (kupe/earring)
-    12: "2",   # story_2 - Lifestyle
-    14: "3",   # story_3 - Lifestyle
-    16: "4",   # story_4 - Lifestyle
-    18: "5",   # story_5 - Lifestyle
-    20: "6",   # story_6 - Worn (kolye/necklace)
+    9: "1",
+    11: "2",
+    13: "3",
+    15: "4",
+    17: "5",
+    18: "6",
+    19: "7",
+    20: "8",
 }
-# Gunde 6 slot: 09:00'dan 20:00'e (2026-09-21'den itibaren, Umut'un karari).
+# Gunde 8 slot: 09,11,13,15,17,18,19,20 (2026-11-03'ten itibaren, Umut'un karari).
 
 def _read_http_error_body(e):
     try:
